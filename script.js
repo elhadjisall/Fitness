@@ -3,17 +3,24 @@ const startBtn = document.getElementById('startBtn');
 const quitBtn = document.getElementById('quitBtn');
 const instructionsBtn = document.getElementById('instructionsBtn');
 const webcam = document.getElementById('webcam');
-const processedImage = document.getElementById('processedImage');
+const processedImage1 = document.getElementById('processedImage1');
+const processedImage2 = document.getElementById('processedImage2');
 const menu = document.getElementById('menu');
 const game = document.getElementById('game');
 const score1El = document.getElementById('score1');
 const score2El = document.getElementById('score2');
 const timerDisplay = document.getElementById('timer');
+const roundIndicator = document.getElementById('roundIndicator');
 const musicToggleBtn = document.getElementById('musicToggleBtn');
-const statusDisplay = document.getElementById('statusDisplay');
-const trackingStatusDiv = document.getElementById('trackingStatus');
 
-// ======== Popup Elements ========
+// ======== Round Popup Elements ========
+const roundPopup = document.getElementById('roundPopup');
+const roundMessage = document.getElementById('roundMessage');
+const roundExercise = document.getElementById('roundExercise');
+const continueBtn = document.getElementById('continueBtn');
+const roundQuitBtn = document.getElementById('roundQuitBtn');
+
+// ======== Winner Popup Elements ========
 const popup = document.getElementById('popup');
 const winnerMessage = document.getElementById('winnerMessage');
 const replayBtn = document.getElementById('replayBtn');
@@ -25,14 +32,25 @@ const gameMusic = new Audio('audio/game_music.mp3');
 menuMusic.loop = true;
 gameMusic.loop = true;
 
+// ======== Game State Variables ========
 let musicOn = false;
-let player1Score = 0;
-let player2Score = 0;
+let player1TotalScore = 0;
+let player2TotalScore = 0;
+let player1RoundScore = 0;
+let player2RoundScore = 0;
 let socket;
 let videoInterval;
 const SERVER_URL = 'http://127.0.0.1:8000';
 let gameTimer;
-let timeLeft = 120;
+let timeLeft = 30;
+let currentRound = 0;
+
+// ======== Round Configuration ========
+const rounds = [
+  { name: 'Jumping Jacks', duration: 60, exercise: 'jumping_jacks' },
+  { name: 'Squats', duration: 60, exercise: 'squats' },
+  { name: 'Push-ups', duration: 60, exercise: 'pushups' }
+];
 
 // ======== Speech (TTS) Function ========
 function speak(text) {
@@ -51,16 +69,16 @@ function stopSpeech() {
 function speakAIReport(report) {
   // Stop any current speech
   window.speechSynthesis.cancel();
-  
+
   // Wait a moment before starting
   setTimeout(() => {
     let speechQueue = [];
-    
+
     // Game summary
     if (report.summary) {
       speechQueue.push(report.summary);
     }
-    
+
     // Player 1 analysis
     if (report.player1) {
       const p1 = report.player1;
@@ -69,18 +87,18 @@ function speakAIReport(report) {
       p1Speech += `Total Jumps: ${p1.stats?.total_jumps || 0}. `;
       p1Speech += `Jumps per minute: ${(p1.stats?.jumps_per_minute || 0).toFixed(1)}. `;
       p1Speech += `Consistency: ${(p1.stats?.consistency || 0).toFixed(1)} percent. `;
-      
+
       if (p1.strengths && p1.strengths.length > 0) {
         p1Speech += `Strengths: ${p1.strengths.join('. ')}. `;
       }
-      
+
       if (p1.improvements && p1.improvements.length > 0) {
         p1Speech += `Tips for improvement: ${p1.improvements.join('. ')}. `;
       }
-      
+
       speechQueue.push(p1Speech);
     }
-    
+
     // Player 2 analysis
     if (report.player2) {
       const p2 = report.player2;
@@ -89,33 +107,33 @@ function speakAIReport(report) {
       p2Speech += `Total Jumps: ${p2.stats?.total_jumps || 0}. `;
       p2Speech += `Jumps per minute: ${(p2.stats?.jumps_per_minute || 0).toFixed(1)}. `;
       p2Speech += `Consistency: ${(p2.stats?.consistency || 0).toFixed(1)} percent. `;
-      
+
       if (p2.strengths && p2.strengths.length > 0) {
         p2Speech += `Strengths: ${p2.strengths.join('. ')}. `;
       }
-      
+
       if (p2.improvements && p2.improvements.length > 0) {
         p2Speech += `Tips for improvement: ${p2.improvements.join('. ')}. `;
       }
-      
+
       speechQueue.push(p2Speech);
     }
-    
+
     // Comparison
     if (report.comparison && report.comparison.length > 0) {
       speechQueue.push(`Comparison. ${report.comparison.join('. ')}.`);
     }
-    
+
     // Speak each section sequentially using onend callback
     let currentIndex = 0;
-    
+
     function speakNext() {
       if (currentIndex < speechQueue.length) {
         const msg = new SpeechSynthesisUtterance(speechQueue[currentIndex]);
         msg.rate = 0.9; // Slightly slower for better comprehension
         msg.pitch = 1;
         msg.lang = 'en-US';
-        
+
         msg.onend = () => {
           currentIndex++;
           if (currentIndex < speechQueue.length) {
@@ -123,11 +141,11 @@ function speakAIReport(report) {
             setTimeout(speakNext, 500);
           }
         };
-        
+
         window.speechSynthesis.speak(msg);
       }
     }
-    
+
     speakNext();
   }, 1500); // Wait 1.5 seconds before starting (after winner announcement)
 }
@@ -141,7 +159,6 @@ async function startWebcam() {
       console.log("📷 Camera stream loaded.");
       connectWebSocket();
     };
-    speak("Let's start the fitness challenge!");
     return true;
   } catch (error) {
     console.error("❌ Camera error:", error);
@@ -153,8 +170,7 @@ async function startWebcam() {
 
 function connectWebSocket() {
   console.log("🔌 Attempting to connect to:", SERVER_URL);
-  
-  // Connect to the backend Socket.IO server
+
   socket = io(SERVER_URL, {
     transports: ['websocket', 'polling'],
     reconnection: true,
@@ -165,12 +181,8 @@ function connectWebSocket() {
   socket.on('connect', () => {
     console.log('✅ Connected to WebSocket server! Socket ID:', socket.id);
     startSendingVideoFrames();
-    trackingStatusDiv.style.display = 'block';
-    processedImage.style.display = 'block';
-    webcam.style.display = 'none';
-    statusDisplay.textContent = "Connected! Detecting person...";
   });
-  
+
   socket.on('ai_report', (report) => {
     console.log('📊 Received AI report:', report);
     // Display the AI report immediately
@@ -185,52 +197,37 @@ function connectWebSocket() {
   socket.on('disconnect', (reason) => {
     console.log('❌ Disconnected from WebSocket server. Reason:', reason);
     stopSendingVideoFrames();
-    trackingStatusDiv.style.display = 'none';
-    processedImage.style.display = 'none';
-    webcam.style.display = 'block';
-    statusDisplay.textContent = "Disconnected from server";
   });
 
   socket.on('tracking_results', (data) => {
-    if (data.image) {
-      processedImage.src = 'data:image/jpeg;base64,' + data.image;
+    // Display separate images for each player
+    if (data.player1_image) {
+      processedImage1.src = 'data:image/jpeg;base64,' + data.player1_image;
+    }
+    if (data.player2_image) {
+      processedImage2.src = 'data:image/jpeg;base64,' + data.player2_image;
     }
     // Update both player scores from backend
     if (data.player1_count !== undefined) {
-      player1Score = data.player1_count;
-      score1El.textContent = player1Score;
+      player1RoundScore = data.player1_count;
     }
     if (data.player2_count !== undefined) {
-      player2Score = data.player2_count;
-      score2El.textContent = player2Score;
+      player2RoundScore = data.player2_count;
     }
-    // Update status display with both players' status
-    if (data.player1_status && data.player2_status) {
-      const status1 = data.player1_status.replace("Player 1: ", "");
-      const status2 = data.player2_status.replace("Player 2: ", "");
-      statusDisplay.textContent = `P1: ${status1} | P2: ${status2}`;
-    } else if (data.player1_status) {
-      statusDisplay.textContent = data.player1_status;
-    }
+    updateScoreDisplay();
   });
 
   socket.on('counter_reset', (data) => {
     console.log("🔄", data.message);
-    player1Score = 0;
-    player2Score = 0;
-    score1El.textContent = 0;
-    score2El.textContent = 0;
-    statusDisplay.textContent = "Counter Reset!";
+    player1RoundScore = 0;
+    player2RoundScore = 0;
+    updateScoreDisplay();
   });
 
   socket.on('connect_error', (error) => {
     console.error("❌ WebSocket connection error:", error);
     console.error("Error details:", error.message);
-    statusDisplay.textContent = "Error connecting to backend. Check console.";
     stopSendingVideoFrames();
-    trackingStatusDiv.style.display = 'none';
-    processedImage.style.display = 'none';
-    webcam.style.display = 'block';
   });
 
   socket.on('error', (error) => {
@@ -241,7 +238,7 @@ function connectWebSocket() {
 function startSendingVideoFrames() {
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('2d');
-  
+
   console.log("📹 Starting to send video frames...");
 
   videoInterval = setInterval(() => {
@@ -249,7 +246,7 @@ function startSendingVideoFrames() {
       canvas.width = webcam.videoWidth;
       canvas.height = webcam.videoHeight;
       context.drawImage(webcam, 0, 0, canvas.width, canvas.height);
-      const imageData = canvas.toDataURL('image/jpeg', 0.3);
+      const imageData = canvas.toDataURL('image/jpeg', 0.2);
       const base64Image = imageData.split(',')[1];
 
       if (socket && socket.connected) {
@@ -258,7 +255,7 @@ function startSendingVideoFrames() {
         console.warn("⚠️ Socket not connected, skipping frame");
       }
     }
-  }, 100);
+  }, 333);
 }
 
 function stopSendingVideoFrames() {
@@ -275,14 +272,26 @@ function pauseSendingVideoFrames() {
   // Don't disconnect socket - we need it for AI report
 }
 
-// ======== Game Timer ========
-function startTimer() {
-  timeLeft = 120;
+// ======== Score Display Update ========
+function updateScoreDisplay() {
+  score1El.textContent = player1TotalScore + player1RoundScore;
+  score2El.textContent = player2TotalScore + player2RoundScore;
+}
+
+// ======== Round Timer ========
+function startRoundTimer() {
+  const round = rounds[currentRound];
+  timeLeft = round.duration;
   clearInterval(gameTimer);
-  timerDisplay.textContent = "2:00";
+
+  timerDisplay.textContent = `0:${timeLeft < 10 ? '0' : ''}${timeLeft}`;
   timerDisplay.classList.remove("warning");
-  
-  // Notify backend that game has started
+  timerDisplay.style.display = "block";
+
+  roundIndicator.textContent = `Round ${currentRound + 1}: ${round.name}`;
+  roundIndicator.style.display = "block";
+
+  // Notify backend that round has started
   if (socket && socket.connected) {
     socket.emit('game_start');
   }
@@ -299,98 +308,143 @@ function startTimer() {
     }
 
     if (timeLeft <= 0) {
-      clearInterval(gameTimer);
-      pauseSendingVideoFrames();  // Stop sending frames but keep socket connected
-      timerDisplay.textContent = "0:00";
-      timerDisplay.classList.remove("warning");
-      timerDisplay.style.display = "none";
-
-      // Determine winner based on actual scores
-      let winnerText = "";
-      if (player1Score > player2Score) {
-        winnerText = `Player 1 Wins! Score: ${player1Score} - ${player2Score}`;
-      } else if (player2Score > player1Score) {
-        winnerText = `Player 2 Wins! Score: ${player1Score} - ${player2Score}`;
-      } else {
-        winnerText = `It's a tie! Score: ${player1Score} - ${player2Score}`;
-      }
-
-      // Hide AI report initially, show loading message
-      const aiReportDiv = document.getElementById('aiReport');
-      aiReportDiv.style.display = 'block';
-      document.getElementById('gameSummary').innerHTML = '<strong>⏳ Generating AI Analysis Report...</strong>';
-      document.getElementById('player1Content').innerHTML = '';
-      document.getElementById('player2Content').innerHTML = '';
-      document.getElementById('comparison').innerHTML = '';
-      
-      winnerMessage.textContent = winnerText;
-      popup.style.display = "flex";
-      speak(winnerText);
-      
-      // Request AI analysis report immediately
-      console.log('🔍 Checking socket connection...', {
-        socketExists: !!socket,
-        socketConnected: socket ? socket.connected : false,
-        socketId: socket ? socket.id : null
-      });
-      
-      if (socket && socket.connected) {
-        console.log('📊 Requesting AI report...');
-        socket.emit('game_end');
-        
-        // Set a timeout in case the report doesn't arrive
-        setTimeout(() => {
-          const aiReportDiv = document.getElementById('aiReport');
-          const gameSummaryDiv = document.getElementById('gameSummary');
-          if (aiReportDiv.style.display === 'block' && gameSummaryDiv.innerHTML.includes('Generating')) {
-            gameSummaryDiv.innerHTML = '<strong>⚠️ AI report is taking longer than expected. Please check your connection.</strong>';
-          }
-        }, 10000); // 10 second timeout
-      } else {
-        console.error('❌ Socket not connected, cannot request AI report');
-        console.error('Socket state:', socket);
-        const gameSummaryDiv = document.getElementById('gameSummary');
-        gameSummaryDiv.innerHTML = '<strong>❌ Error: Could not connect to server for AI analysis. Socket disconnected.</strong>';
-        
-        // Try to reconnect and request report
-        if (socket) {
-          console.log('🔄 Attempting to reconnect socket...');
-          socket.connect();
-          socket.once('connect', () => {
-            console.log('✅ Reconnected! Requesting AI report...');
-            socket.emit('game_end');
-          });
-        }
-      }
+      endRound();
     }
   }, 1000);
+}
+
+// ======== End Round ========
+function endRound() {
+  clearInterval(gameTimer);
+  timerDisplay.classList.remove("warning");
+
+  // Add round scores to total
+  player1TotalScore += player1RoundScore;
+  player2TotalScore += player2RoundScore;
+
+  // Reset round scores
+  player1RoundScore = 0;
+  player2RoundScore = 0;
+
+  // Reset backend counter
+  if (socket && socket.connected) {
+    socket.emit('reset_counter');
+  }
+
+  updateScoreDisplay();
+
+  // Check if there are more rounds
+  if (currentRound < rounds.length - 1) {
+    showRoundTransition();
+  } else {
+    showWinnerPopup();
+  }
+}
+
+// ======== Show Round Transition Popup ========
+function showRoundTransition() {
+  currentRound++;
+  const nextRound = rounds[currentRound];
+
+  timerDisplay.style.display = "none";
+  roundIndicator.style.display = "none";
+
+  roundMessage.textContent = `Round ${currentRound + 1}`;
+  roundExercise.textContent = `Next Exercise: ${nextRound.name}`;
+  roundPopup.style.display = "flex";
+
+  speak(`Round ${currentRound + 1}. Next exercise: ${nextRound.name}`);
+}
+
+// ======== Show Winner Popup ========
+function showWinnerPopup() {
+  pauseSendingVideoFrames();  // Stop sending frames but keep socket connected
+  timerDisplay.style.display = "none";
+  roundIndicator.style.display = "none";
+
+  let winnerText = "";
+  if (player1TotalScore > player2TotalScore) {
+    winnerText = "🎉 Player 1 Wins! 🎉";
+  } else if (player2TotalScore > player1TotalScore) {
+    winnerText = "🎉 Player 2 Wins! 🎉";
+  } else {
+    winnerText = "🤝 It's a Tie! 🤝";
+  }
+
+  // Hide AI report initially, show loading message
+  const aiReportDiv = document.getElementById('aiReport');
+  aiReportDiv.style.display = 'block';
+  document.getElementById('gameSummary').innerHTML = '<strong>⏳ Generating AI Analysis Report...</strong>';
+  document.getElementById('player1Content').innerHTML = '';
+  document.getElementById('player2Content').innerHTML = '';
+  document.getElementById('comparison').innerHTML = '';
+
+  winnerMessage.textContent = winnerText;
+  popup.style.display = "flex";
+  speak(winnerText);
+
+  // Request AI analysis report immediately
+  console.log('🔍 Checking socket connection...', {
+    socketExists: !!socket,
+    socketConnected: socket ? socket.connected : false,
+    socketId: socket ? socket.id : null
+  });
+
+  if (socket && socket.connected) {
+    console.log('📊 Requesting AI report...');
+    socket.emit('game_end');
+
+    // Set a timeout in case the report doesn't arrive
+    setTimeout(() => {
+      const aiReportDiv = document.getElementById('aiReport');
+      const gameSummaryDiv = document.getElementById('gameSummary');
+      if (aiReportDiv.style.display === 'block' && gameSummaryDiv.innerHTML.includes('Generating')) {
+        gameSummaryDiv.innerHTML = '<strong>⚠️ AI report is taking longer than expected. Please check your connection.</strong>';
+      }
+    }, 10000); // 10 second timeout
+  } else {
+    console.error('❌ Socket not connected, cannot request AI report');
+    console.error('Socket state:', socket);
+    const gameSummaryDiv = document.getElementById('gameSummary');
+    gameSummaryDiv.innerHTML = '<strong>❌ Error: Could not connect to server for AI analysis. Socket disconnected.</strong>';
+
+    // Try to reconnect and request report
+    if (socket) {
+      console.log('🔄 Attempting to reconnect socket...');
+      socket.connect();
+      socket.once('connect', () => {
+        console.log('✅ Reconnected! Requesting AI report...');
+        socket.emit('game_end');
+      });
+    }
+  }
 }
 
 // ======== AI Report Display ========
 function displayAIReport(report) {
   console.log('📊 Displaying AI report:', report);
-  
+
   const aiReportDiv = document.getElementById('aiReport');
   const gameSummaryDiv = document.getElementById('gameSummary');
   const player1ContentDiv = document.getElementById('player1Content');
   const player2ContentDiv = document.getElementById('player2Content');
   const comparisonDiv = document.getElementById('comparison');
-  
+
   if (!report) {
     console.error('❌ No report data received');
     gameSummaryDiv.innerHTML = '<strong>❌ Error: No report data available.</strong>';
     return;
   }
-  
+
   // Show AI report section
   aiReportDiv.style.display = 'block';
-  
+
   try {
     // Display game summary
     if (report.summary) {
       gameSummaryDiv.innerHTML = `<strong>📊 ${report.summary}</strong>`;
     }
-    
+
     // Display Player 1 analysis
     if (report.player1) {
       const p1 = report.player1;
@@ -410,7 +464,7 @@ function displayAIReport(report) {
         ${p1.improvements && p1.improvements.length > 0 ? `<div style="margin: 10px 0;"><strong>💡 Tips for Improvement:</strong><ul style="margin: 5px 0; padding-left: 20px;">${p1.improvements.map(i => `<li>${i}</li>`).join('')}</ul></div>` : ''}
       `;
     }
-    
+
     // Display Player 2 analysis
     if (report.player2) {
       const p2 = report.player2;
@@ -430,7 +484,7 @@ function displayAIReport(report) {
         ${p2.improvements && p2.improvements.length > 0 ? `<div style="margin: 10px 0;"><strong>💡 Tips for Improvement:</strong><ul style="margin: 5px 0; padding-left: 20px;">${p2.improvements.map(i => `<li>${i}</li>`).join('')}</ul></div>` : ''}
       `;
     }
-    
+
     // Display comparison
     if (report.comparison && report.comparison.length > 0) {
       comparisonDiv.innerHTML = `
@@ -440,16 +494,16 @@ function displayAIReport(report) {
         </ul>
       `;
     }
-    
+
     // Scroll to top of popup to show winner message first
     const popupContent = document.querySelector('.popup-content');
     if (popupContent) {
       popupContent.scrollTop = 0;
     }
-    
+
     // Read the AI report out loud using TTS
     speakAIReport(report);
-    
+
     console.log('✅ AI report displayed successfully');
   } catch (error) {
     console.error('❌ Error displaying AI report:', error);
@@ -457,15 +511,27 @@ function displayAIReport(report) {
   }
 }
 
-// ======== Button events ========
+// ======== Button Events ========
 startBtn.addEventListener('click', async () => {
   console.log("🎮 Start button clicked");
   const webcamGranted = await startWebcam();
   if (webcamGranted) {
     menu.style.display = 'none';
     game.style.display = 'flex';
-    timerDisplay.style.display = "block";
-    startTimer();
+
+    // Reset game state
+    currentRound = 0;
+    player1TotalScore = 0;
+    player2TotalScore = 0;
+    player1RoundScore = 0;
+    player2RoundScore = 0;
+    updateScoreDisplay();
+
+    // Show round transition before first round
+    roundMessage.textContent = "Get Ready!";
+    roundExercise.textContent = `First Exercise: ${rounds[0].name}`;
+    roundPopup.style.display = "flex";
+    speak("Get ready for the first round!");
 
     if (musicOn) {
       menuMusic.pause();
@@ -476,7 +542,7 @@ startBtn.addEventListener('click', async () => {
 });
 
 instructionsBtn.addEventListener('click', () => {
-  speak("Welcome to the Kids Fitness Battle! Two players stand in front of the camera. Perform the exercises shown, and every correct move earns you one point. After two minutes, the player with the most points wins!");
+  speak("Welcome to the Kids Fitness Battle! Two players compete in three rounds. Round 1: Jumping Jacks. Round 2: Squats. Round 3: Push-ups. Each round lasts 30 seconds. The player with the most total points wins!");
 });
 
 musicToggleBtn.addEventListener('click', () => {
@@ -512,14 +578,38 @@ quitBtn.addEventListener('click', () => {
   speak("Game exited. Returning to the main menu.");
 });
 
+continueBtn.addEventListener('click', () => {
+  roundPopup.style.display = "none";
+  startRoundTimer();
+});
+
+roundQuitBtn.addEventListener('click', () => {
+  roundPopup.style.display = "none";
+  stopGame();
+  game.style.display = 'none';
+  menu.style.display = 'flex';
+
+  if (musicOn) {
+    gameMusic.pause();
+    gameMusic.currentTime = 0;
+    menuMusic.play();
+  }
+
+  speak("Returning to the main menu.");
+});
+
 replayBtn.addEventListener('click', () => {
   stopSpeech(); // Stop AI analysis speech if playing
   popup.style.display = "none";
-  player1Score = 0;
-  player2Score = 0;
-  score1El.textContent = 0;
-  score2El.textContent = 0;
-  
+
+  // Reset game state
+  currentRound = 0;
+  player1TotalScore = 0;
+  player2TotalScore = 0;
+  player1RoundScore = 0;
+  player2RoundScore = 0;
+  updateScoreDisplay();
+
   // Hide AI report
   document.getElementById('aiReport').style.display = 'none';
 
@@ -527,10 +617,12 @@ replayBtn.addEventListener('click', () => {
     socket.emit('reset_counter');
   }
 
-  timerDisplay.style.display = "block";
+  // Show round transition before first round
+  roundMessage.textContent = "Get Ready!";
+  roundExercise.textContent = `First Exercise: ${rounds[0].name}`;
+  roundPopup.style.display = "flex";
   startSendingVideoFrames();  // Resume sending frames
-  startTimer();
-  speak("New round starting!");
+  speak("New match starting!");
 });
 
 popupQuitBtn.addEventListener('click', () => {
@@ -551,26 +643,27 @@ popupQuitBtn.addEventListener('click', () => {
 
 function stopGame() {
   stopSpeech(); // Stop any ongoing speech (AI analysis, etc.)
-  
+
   const stream = webcam.srcObject;
   if (stream) {
     stream.getTracks().forEach(track => track.stop());
   }
 
-  player1Score = 0;
-  player2Score = 0;
-  score1El.textContent = 0;
-  score2El.textContent = 0;
+  player1TotalScore = 0;
+  player2TotalScore = 0;
+  player1RoundScore = 0;
+  player2RoundScore = 0;
+  currentRound = 0;
+  updateScoreDisplay();
 
   clearInterval(gameTimer);
   stopSendingVideoFrames();
 
-  timerDisplay.textContent = "2:00";
+  timerDisplay.textContent = "0:30";
   timerDisplay.classList.remove("warning");
   timerDisplay.style.display = "none";
+  roundIndicator.style.display = "none";
 
-  processedImage.src = "";
-  processedImage.style.display = 'none';
-  statusDisplay.textContent = "Waiting for person...";
-  trackingStatusDiv.style.display = 'none';
+  processedImage1.src = "";
+  processedImage2.src = "";
 }

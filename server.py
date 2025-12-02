@@ -8,8 +8,8 @@ import socketio
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from Fitness.jumping_jack_counter import JumpingJackCounter
-from Fitness.ai_analyzer import generate_performance_report
+from jumping_jack_counter import JumpingJackCounter
+from ai_analyzer import generate_performance_report
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -74,31 +74,22 @@ async def handle_video_frame(sid, data):
             print("Failed to decode frame from client.")
             return
 
-        # Save original frame before processing (for pixel copying later)
-        original_frame = frame.copy()
-        
         # Process the frame normally (MediaPipe expects normal orientation)
         processed_frame, player1_count, player2_count, player1_status, player2_status = jump_counter.process_frame(frame)
-        
-        # Flip the processed frame for mirror display
-        processed_frame = cv2.flip(processed_frame, 1)
-        
-        # Redraw text on the correct side after flipping (text will be readable on left side)
+
+        # Split the processed frame into two halves
         height, width = processed_frame.shape[:2]
         mid_point = width // 2
-        
-        # Redraw the vertical separator line after flipping
-        cv2.line(processed_frame, (mid_point, 0), (mid_point, height), (255, 255, 255), 2)
-        
-        # Remove old backwards text by copying pixels from flipped original (without text)
-        # Flip the original frame to match orientation
-        flipped_original = cv2.flip(original_frame, 1)
-        # Copy regions from the flipped original to cover where old text was
-        processed_frame[0:125, :410] = flipped_original[0:125, :410]  # Left side
-        processed_frame[0:125, width - 410:width] = flipped_original[0:125, width - 410:width]  # Right side
-        
-        # Draw Player 1 info on left side
-        # Status text
+
+        # Extract individual player frames (before flipping)
+        player1_frame_raw = processed_frame[:, mid_point:]  # Right half (will be Player 1 after flip)
+        player2_frame_raw = processed_frame[:, :mid_point]  # Left half (will be Player 2 after flip)
+
+        # Flip both frames for mirror display
+        player1_frame = cv2.flip(player1_frame_raw, 1)
+        player2_frame = cv2.flip(player2_frame_raw, 1)
+
+        # Draw Player 1 info on their frame
         if "JUMPING JACK" in player1_status:
             color1 = (0, 255, 0)  # Green - full jumping jack position
         elif "Hands Up" in player1_status or "Legs Spread" in player1_status:
@@ -107,25 +98,20 @@ async def handle_video_frame(sid, data):
             color1 = (0, 165, 255)  # Orange - starting position
         else:
             color1 = (0, 0, 255)  # Red - no detection
-        
-        # Player 1 status with white outline
+
         status_text1 = player1_status.replace("Player 1: ", "")
-        # Shorten long status messages for better display
         if len(status_text1) > 25:
             status_text1 = status_text1[:22] + "..."
-        cv2.putText(processed_frame, status_text1, (10, 120), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 4, cv2.LINE_AA)  # White outline
-        cv2.putText(processed_frame, status_text1, (10, 120), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, color1, 2, cv2.LINE_AA)  # Colored text
-        
-        # Player 1 count with white outline
-        cv2.putText(processed_frame, f'P1: {player1_count}', (10, 60), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 5, cv2.LINE_AA)  # White outline
-        cv2.putText(processed_frame, f'P1: {player1_count}', (10, 60), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 3, cv2.LINE_AA)  # Green text
-        
-        # Draw Player 2 info on right side
-        # Status text
+        cv2.putText(player1_frame, status_text1, (10, 120),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 4, cv2.LINE_AA)
+        cv2.putText(player1_frame, status_text1, (10, 120),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, color1, 2, cv2.LINE_AA)
+        cv2.putText(player1_frame, f'Count: {player1_count}', (10, 60),
+                   cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 5, cv2.LINE_AA)
+        cv2.putText(player1_frame, f'Count: {player1_count}', (10, 60),
+                   cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 3, cv2.LINE_AA)
+
+        # Draw Player 2 info on their frame
         if "JUMPING JACK" in player2_status:
             color2 = (0, 255, 0)  # Green - full jumping jack position
         elif "Hands Up" in player2_status or "Legs Spread" in player2_status:
@@ -134,33 +120,30 @@ async def handle_video_frame(sid, data):
             color2 = (0, 165, 255)  # Orange - starting position
         else:
             color2 = (0, 0, 255)  # Red - no detection
-        
-        # Player 2 status with white outline (on right side)
+
         status_text2 = player2_status.replace("Player 2: ", "")
-        # Shorten long status messages for better display
         if len(status_text2) > 25:
             status_text2 = status_text2[:22] + "..."
-        text_size2 = cv2.getTextSize(status_text2, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)[0]
-        text_x2 = mid_point + 10
-        cv2.putText(processed_frame, status_text2, (text_x2, 120), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 4, cv2.LINE_AA)  # White outline
-        cv2.putText(processed_frame, status_text2, (text_x2, 120), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, color2, 2, cv2.LINE_AA)  # Colored text
-        
-        # Player 2 count with white outline (on right side)
-        text_size_count2 = cv2.getTextSize(f'P2: {player2_count}', cv2.FONT_HERSHEY_SIMPLEX, 1.5, 3)[0]
-        cv2.putText(processed_frame, f'P2: {player2_count}', (text_x2, 60), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 5, cv2.LINE_AA)  # White outline
-        cv2.putText(processed_frame, f'P2: {player2_count}', (text_x2, 60), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 0, 255), 3, cv2.LINE_AA)  # Magenta text
+        cv2.putText(player2_frame, status_text2, (10, 120),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 4, cv2.LINE_AA)
+        cv2.putText(player2_frame, status_text2, (10, 120),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, color2, 2, cv2.LINE_AA)
+        cv2.putText(player2_frame, f'Count: {player2_count}', (10, 60),
+                   cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 5, cv2.LINE_AA)
+        cv2.putText(player2_frame, f'Count: {player2_count}', (10, 60),
+                   cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 0, 255), 3, cv2.LINE_AA)
 
-        # Encode processed frame to base64
-        _, buffer = cv2.imencode('.jpg', processed_frame, [cv2.IMWRITE_JPEG_QUALITY, 30])
-        encoded_frame = base64.b64encode(buffer).decode('utf-8')
+        # Encode both frames to base64
+        _, buffer1 = cv2.imencode('.jpg', player1_frame, [cv2.IMWRITE_JPEG_QUALITY, 30])
+        encoded_frame1 = base64.b64encode(buffer1).decode('utf-8')
 
-        # Emit results back to client with both player scores
+        _, buffer2 = cv2.imencode('.jpg', player2_frame, [cv2.IMWRITE_JPEG_QUALITY, 30])
+        encoded_frame2 = base64.b64encode(buffer2).decode('utf-8')
+
+        # Emit results back to client with separate images for each player
         await sio.emit('tracking_results', {
-            'image': encoded_frame,
+            'player1_image': encoded_frame1,
+            'player2_image': encoded_frame2,
             'player1_count': player1_count,
             'player2_count': player2_count,
             'player1_status': player1_status,
