@@ -139,11 +139,32 @@ button:hover {
   box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
   text-align: center;
   max-width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .popup-content h2 {
   margin-bottom: 20px;
   font-size: 28px;
+  color: #ff2d55;
+}
+
+#aiReport {
+  margin-top: 20px;
+  text-align: left;
+  max-height: 500px;
+  overflow-y: auto;
+  padding: 10px;
+  background-color: #f9f9f9;
+  border-radius: 10px;
+}
+
+#aiReport h3 {
+  color: #4CAF50;
+  margin-bottom: 15px;
+  text-align: center;
+  font-size: 24px;
 }
 
 .popup-content button {

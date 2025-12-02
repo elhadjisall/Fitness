@@ -45,6 +45,30 @@
     <div id="popup" style="display: none;">
       <div class="popup-content">
         <h2 id="winnerMessage"></h2>
+        
+        <!-- AI Analysis Report Section -->
+        <div id="aiReport" style="display: none; margin-top: 20px; text-align: left; max-height: 400px; overflow-y: auto;">
+          <h3 style="color: #4CAF50; margin-bottom: 15px;">🤖 AI Performance Analysis</h3>
+          
+          <!-- Game Summary -->
+          <div id="gameSummary" style="background: #f0f0f0; padding: 10px; border-radius: 5px; margin-bottom: 15px;"></div>
+          
+          <!-- Player 1 Analysis -->
+          <div id="player1Analysis" style="background: #e8f5e9; padding: 15px; border-radius: 5px; margin-bottom: 15px; border-left: 4px solid #4CAF50;">
+            <h4 style="color: #2e7d32; margin-top: 0;">Player 1 Analysis</h4>
+            <div id="player1Content"></div>
+          </div>
+          
+          <!-- Player 2 Analysis -->
+          <div id="player2Analysis" style="background: #f3e5f5; padding: 15px; border-radius: 5px; margin-bottom: 15px; border-left: 4px solid #9c27b0;">
+            <h4 style="color: #7b1fa2; margin-top: 0;">Player 2 Analysis</h4>
+            <div id="player2Content"></div>
+          </div>
+          
+          <!-- Comparison -->
+          <div id="comparison" style="background: #fff3e0; padding: 10px; border-radius: 5px; border-left: 4px solid #ff9800;"></div>
+        </div>
+        
         <button id="replayBtn">Replay</button>
         <button id="popupQuitBtn">Quit</button>
       </div>
