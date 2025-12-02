@@ -10,13 +10,22 @@ class JumpingJackCounter:
         self.mp_pose = mp.solutions.pose
         self.mp_drawing = mp.solutions.drawing_utils
         # Create separate pose detectors for each player to avoid cross-contamination
+        # Optimized settings for better performance
         self.pose_player1 = self.mp_pose.Pose(
             min_detection_confidence=0.5,
-            min_tracking_confidence=0.5
+            min_tracking_confidence=0.5,
+            model_complexity=0,  # Fastest model (0=fastest, 1=balanced, 2=most accurate)
+            smooth_landmarks=True,
+            enable_segmentation=False,  # Disable for better performance
+            static_image_mode=False  # Video mode for better performance
         )
         self.pose_player2 = self.mp_pose.Pose(
             min_detection_confidence=0.5,
-            min_tracking_confidence=0.5
+            min_tracking_confidence=0.5,
+            model_complexity=0,  # Fastest model
+            smooth_landmarks=True,
+            enable_segmentation=False,  # Disable for better performance
+            static_image_mode=False  # Video mode for better performance
         )
         
         # Counter variables for Player 1 (left side) and Player 2 (right side)
@@ -302,7 +311,12 @@ class JumpingJackCounter:
             # Starting position: NOT in jumping jack (hands down OR legs together)
             # Jumping jack position: hands up AND legs spread
             # Count when we transition from NOT in jumping jack to IN jumping jack
-            if current_jumping_jack_position and not in_jumping_jack:
+            if player_num == 1:
+                previous_jumping_jack_position = self.player1_in_jumping_jack_position
+            else:
+                previous_jumping_jack_position = self.player2_in_jumping_jack_position
+            
+            if current_jumping_jack_position and not previous_jumping_jack_position:
                 # Increment count for this specific player
                 if player_num == 1:
                     self.player1_count += 1

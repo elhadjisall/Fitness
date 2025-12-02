@@ -297,24 +297,63 @@ function connectWebSocket() {
 function startSendingVideoFrames() {
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('2d');
+  
+  let isProcessing = false;
+  let lastFrameTime = 0;
+  const TARGET_FPS = 24; // Smooth 24 FPS
+  const FRAME_INTERVAL = 1000 / TARGET_FPS; // ~42ms between frames
+  const TARGET_WIDTH = 800; // Good balance between quality and speed
 
-  console.log("📹 Starting to send video frames...");
+  console.log("📹 Starting to send video frames at", TARGET_FPS, "FPS...");
 
-  videoInterval = setInterval(() => {
-    if (webcam.readyState === webcam.HAVE_ENOUGH_DATA) {
-      canvas.width = webcam.videoWidth;
-      canvas.height = webcam.videoHeight;
-      context.drawImage(webcam, 0, 0, canvas.width, canvas.height);
-      const imageData = canvas.toDataURL('image/jpeg', 0.2);
+  function captureAndSendFrame() {
+    const now = performance.now();
+    
+    // Skip if still processing or socket not connected
+    if (isProcessing || !socket || !socket.connected || webcam.readyState !== webcam.HAVE_ENOUGH_DATA) {
+      requestAnimationFrame(captureAndSendFrame);
+      return;
+    }
+
+    // Throttle to target FPS
+    if (now - lastFrameTime < FRAME_INTERVAL) {
+      requestAnimationFrame(captureAndSendFrame);
+      return;
+    }
+
+    isProcessing = true;
+    lastFrameTime = now;
+    
+    try {
+      // Calculate optimal dimensions maintaining aspect ratio
+      const videoAspect = webcam.videoWidth / webcam.videoHeight;
+      let width = TARGET_WIDTH;
+      let height = Math.round(TARGET_WIDTH / videoAspect);
+      
+      // Set canvas size
+      canvas.width = width;
+      canvas.height = height;
+      
+      // Draw and resize in one step
+      context.drawImage(webcam, 0, 0, width, height);
+      
+      // Use better quality (0.7 for good balance)
+      const imageData = canvas.toDataURL('image/jpeg', 0.7);
       const base64Image = imageData.split(',')[1];
 
       if (socket && socket.connected) {
         socket.emit('video_frame', { image: base64Image });
-      } else {
-        console.warn("⚠️ Socket not connected, skipping frame");
       }
+    } catch (error) {
+      console.error("Error capturing frame:", error);
+    } finally {
+      isProcessing = false;
+      requestAnimationFrame(captureAndSendFrame);
     }
-  }, 333);
+  }
+
+  // Start the capture loop
+  captureAndSendFrame();
 }
 
 function stopSendingVideoFrames() {

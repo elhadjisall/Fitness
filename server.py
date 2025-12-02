@@ -36,6 +36,8 @@ app.mount('/socket.io', socket_app)
 
 # Dictionary to store counter instances per session
 counters = {}
+# Track processing state to skip frames if processing is slow
+processing_state = {}
 
 @app.get("/")
 async def read_root():
@@ -52,18 +54,26 @@ async def disconnect(sid):
     print(f"❌ Client disconnected: {sid}")
     if sid in counters:
         del counters[sid]
+    if sid in processing_state:
+        del processing_state[sid]
 
 @sio.on('video_frame')
 async def handle_video_frame(sid, data):
     try:
+        # Skip frame if still processing previous one (frame dropping for smoothness)
+        if sid in processing_state and processing_state[sid]:
+            return
+        
         if sid not in counters:
             counters[sid] = JumpingJackCounter()
         
+        processing_state[sid] = True
         jump_counter = counters[sid]
         
         # Decode base64 image
         if 'image' not in data:
             print("No 'image' key in data")
+            processing_state[sid] = False
             return
             
         img_data = base64.b64decode(data['image'])
@@ -72,7 +82,17 @@ async def handle_video_frame(sid, data):
 
         if frame is None:
             print("Failed to decode frame from client.")
+            processing_state[sid] = False
             return
+
+        # Resize frame for faster processing (MediaPipe works well on 640-800px width)
+        PROCESSING_WIDTH = 640
+        height, width = frame.shape[:2]
+        if width > PROCESSING_WIDTH:
+            scale = PROCESSING_WIDTH / width
+            new_width = PROCESSING_WIDTH
+            new_height = int(height * scale)
+            frame = cv2.resize(frame, (new_width, new_height), interpolation=cv2.INTER_AREA)
 
         # Process the frame normally (MediaPipe expects normal orientation)
         processed_frame, player1_count, player2_count, player1_status, player2_status = jump_counter.process_frame(frame)
@@ -133,11 +153,17 @@ async def handle_video_frame(sid, data):
         cv2.putText(player2_frame, f'Count: {player2_count}', (10, 60),
                    cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 0, 255), 3, cv2.LINE_AA)
 
-        # Encode both frames to base64
-        _, buffer1 = cv2.imencode('.jpg', player1_frame, [cv2.IMWRITE_JPEG_QUALITY, 30])
+        # Resize frames for display (optimize for transmission)
+        DISPLAY_WIDTH = 640
+        DISPLAY_HEIGHT = 480
+        player1_frame_resized = cv2.resize(player1_frame, (DISPLAY_WIDTH, DISPLAY_HEIGHT), interpolation=cv2.INTER_AREA)
+        player2_frame_resized = cv2.resize(player2_frame, (DISPLAY_WIDTH, DISPLAY_HEIGHT), interpolation=cv2.INTER_AREA)
+
+        # Encode both frames to base64 with better quality
+        _, buffer1 = cv2.imencode('.jpg', player1_frame_resized, [cv2.IMWRITE_JPEG_QUALITY, 75])
         encoded_frame1 = base64.b64encode(buffer1).decode('utf-8')
 
-        _, buffer2 = cv2.imencode('.jpg', player2_frame, [cv2.IMWRITE_JPEG_QUALITY, 30])
+        _, buffer2 = cv2.imencode('.jpg', player2_frame_resized, [cv2.IMWRITE_JPEG_QUALITY, 75])
         encoded_frame2 = base64.b64encode(buffer2).decode('utf-8')
 
         # Emit results back to client with separate images for each player
@@ -149,11 +175,15 @@ async def handle_video_frame(sid, data):
             'player1_status': player1_status,
             'player2_status': player2_status
         }, room=sid)
+        
+        processing_state[sid] = False
 
     except Exception as e:
         print(f"❌ Error processing video frame: {e}")
         import traceback
         traceback.print_exc()
+        if sid in processing_state:
+            processing_state[sid] = False
 
 @sio.on('reset_counter')
 async def handle_reset_counter(sid):
