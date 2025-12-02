@@ -7,11 +7,14 @@ const processedImage1 = document.getElementById('processedImage1');
 const processedImage2 = document.getElementById('processedImage2');
 const menu = document.getElementById('menu');
 const game = document.getElementById('game');
+const instructions = document.getElementById('instructions');
 const score1El = document.getElementById('score1');
 const score2El = document.getElementById('score2');
 const timerDisplay = document.getElementById('timer');
 const roundIndicator = document.getElementById('roundIndicator');
 const musicToggleBtn = document.getElementById('musicToggleBtn');
+const backToMenuBtn = document.getElementById('backToMenuBtn');
+const speakInstructionsBtn = document.getElementById('speakInstructionsBtn');
 
 // ======== Round Popup Elements ========
 const roundPopup = document.getElementById('roundPopup');
@@ -19,6 +22,8 @@ const roundMessage = document.getElementById('roundMessage');
 const roundExercise = document.getElementById('roundExercise');
 const continueBtn = document.getElementById('continueBtn');
 const roundQuitBtn = document.getElementById('roundQuitBtn');
+const roundDemoVideo = document.getElementById('roundDemoVideo');
+const roundDemoVideoSource = document.getElementById('roundDemoVideoSource');
 
 // ======== Winner Popup Elements ========
 const popup = document.getElementById('popup');
@@ -31,6 +36,18 @@ const menuMusic = new Audio('audio/menu_music.mp3');
 const gameMusic = new Audio('audio/game_music.mp3');
 menuMusic.loop = true;
 gameMusic.loop = true;
+
+// ======== Game Sound Effects and Round Music ========
+const hajimeSound = new Audio('audio/hajime.mp3'); // Plays when game starts
+const jumpingJacksMusic = new Audio('audio/jumping_jacks_round.mp3');
+const squatsMusic = new Audio('audio/squats_round.mp3');
+const pushupsMusic = new Audio('audio/pushups_round.mp3');
+jumpingJacksMusic.loop = true;
+squatsMusic.loop = true;
+pushupsMusic.loop = true;
+
+// Keep track of currently playing round music
+let currentRoundMusic = null;
 
 // ======== Game State Variables ========
 let musicOn = false;
@@ -47,17 +64,59 @@ let currentRound = 0;
 
 // ======== Round Configuration ========
 const rounds = [
-  { name: 'Jumping Jacks', duration: 60, exercise: 'jumping_jacks' },
-  { name: 'Squats', duration: 60, exercise: 'squats' },
-  { name: 'Push-ups', duration: 60, exercise: 'pushups' }
+  {
+    name: 'Jumping Jacks',
+    duration: 60,
+    exercise: 'jumping_jacks',
+    videoPath: 'videos/jumping_jacks_demo.mp4',
+    music: jumpingJacksMusic
+  },
+  {
+    name: 'Squats',
+    duration: 60,
+    exercise: 'squats',
+    videoPath: 'videos/squats_demo.mp4',
+    music: squatsMusic
+  },
+  {
+    name: 'Push-ups',
+    duration: 60,
+    exercise: 'pushups',
+    videoPath: 'videos/pushups_demo.mp4',
+    music: pushupsMusic
+  }
 ];
 
 // ======== Speech (TTS) Function ========
-function speak(text) {
+function speak(text, options = {}) {
   const msg = new SpeechSynthesisUtterance(text);
-  msg.rate = 1;
-  msg.pitch = 1;
+
+  // Enhanced voice settings for more natural, human-like speech
+  msg.rate = options.rate || 0.95; // Slightly slower for clarity
+  msg.pitch = options.pitch || 1.1; // Slightly higher pitch for friendliness
+  msg.volume = options.volume || 1.0;
   msg.lang = 'en-US';
+
+  // Try to use a more natural voice if available
+  const voices = window.speechSynthesis.getVoices();
+  // Prefer Google or Microsoft voices which sound more natural
+  const preferredVoice = voices.find(voice =>
+    voice.name.includes('Google') ||
+    voice.name.includes('Microsoft') ||
+    voice.name.includes('Natural') ||
+    voice.name.includes('Enhanced')
+  );
+
+  if (preferredVoice) {
+    msg.voice = preferredVoice;
+  } else if (voices.length > 0) {
+    // Fall back to first available English voice
+    const englishVoice = voices.find(voice => voice.lang.startsWith('en'));
+    if (englishVoice) {
+      msg.voice = englishVoice;
+    }
+  }
+
   window.speechSynthesis.speak(msg);
 }
 
@@ -349,8 +408,19 @@ function showRoundTransition() {
   timerDisplay.style.display = "none";
   roundIndicator.style.display = "none";
 
+  // Stop current round music
+  if (currentRoundMusic) {
+    currentRoundMusic.pause();
+    currentRoundMusic.currentTime = 0;
+  }
+
   roundMessage.textContent = `Round ${currentRound + 1}`;
   roundExercise.textContent = `Next Exercise: ${nextRound.name}`;
+
+  // Set video source for the next round
+  roundDemoVideoSource.src = nextRound.videoPath;
+  roundDemoVideo.load(); // Reload video with new source
+
   roundPopup.style.display = "flex";
 
   speak(`Round ${currentRound + 1}. Next exercise: ${nextRound.name}`);
@@ -519,6 +589,12 @@ startBtn.addEventListener('click', async () => {
     menu.style.display = 'none';
     game.style.display = 'flex';
 
+    // Play Hajime sound when game starts
+    if (musicOn) {
+      menuMusic.pause();
+      hajimeSound.play().catch(err => console.log("Error playing hajime sound:", err));
+    }
+
     // Reset game state
     currentRound = 0;
     player1TotalScore = 0;
@@ -527,9 +603,14 @@ startBtn.addEventListener('click', async () => {
     player2RoundScore = 0;
     updateScoreDisplay();
 
-    // Show round transition before first round
+    // Show round transition before first round with video
     roundMessage.textContent = "Get Ready!";
     roundExercise.textContent = `First Exercise: ${rounds[0].name}`;
+
+    // Set video source for the round popup
+    roundDemoVideoSource.src = rounds[0].videoPath;
+    roundDemoVideo.load(); // Reload video with new source
+
     roundPopup.style.display = "flex";
     speak("Get ready for the first round!");
 
@@ -580,6 +661,19 @@ quitBtn.addEventListener('click', () => {
 
 continueBtn.addEventListener('click', () => {
   roundPopup.style.display = "none";
+
+  // Stop current round music if any
+  if (currentRoundMusic) {
+    currentRoundMusic.pause();
+    currentRoundMusic.currentTime = 0;
+  }
+
+  // Start playing the music for this round
+  if (musicOn && rounds[currentRound]) {
+    currentRoundMusic = rounds[currentRound].music;
+    currentRoundMusic.play().catch(err => console.log("Error playing round music:", err));
+  }
+
   startRoundTimer();
 });
 
@@ -632,6 +726,12 @@ popupQuitBtn.addEventListener('click', () => {
   game.style.display = 'none';
   menu.style.display = 'flex';
 
+  // Stop round music if playing
+  if (currentRoundMusic) {
+    currentRoundMusic.pause();
+    currentRoundMusic.currentTime = 0;
+  }
+
   if (musicOn) {
     gameMusic.pause();
     gameMusic.currentTime = 0;
@@ -640,6 +740,41 @@ popupQuitBtn.addEventListener('click', () => {
 
   speak("Returning to the main menu.");
 });
+
+// ======== Instructions Page Navigation ========
+instructionsBtn.addEventListener('click', () => {
+  menu.style.display = 'none';
+  instructions.style.display = 'flex';
+});
+
+backToMenuBtn.addEventListener('click', () => {
+  stopSpeech(); // Stop TTS if playing
+  instructions.style.display = 'none';
+  menu.style.display = 'flex';
+});
+
+// ======== Speak Instructions Button ========
+speakInstructionsBtn.addEventListener('click', () => {
+  const instructionsText = `
+    Welcome to Fit Ninjas! This is a fun exercise game for two players.
+    The game has 3 rounds: Jumping Jacks, Squats, and Push-ups.
+    Each round lasts 1 minute.
+    Stand in front of the camera - Player 1 on the LEFT, Player 2 on the RIGHT.
+    Perform the exercises correctly to earn points.
+    The player with the most points at the end wins!
+    Watch the demo videos below to learn proper form.
+    Good luck and have fun!
+  `;
+  speak(instructionsText);
+});
+
+// ======== Ensure voices are loaded for better TTS ========
+// Some browsers need this to load voices properly
+if (speechSynthesis.onvoiceschanged !== undefined) {
+  speechSynthesis.onvoiceschanged = () => {
+    // Voices loaded, no action needed - they'll be used when speak() is called
+  };
+}
 
 function stopGame() {
   stopSpeech(); // Stop any ongoing speech (AI analysis, etc.)

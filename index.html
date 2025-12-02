@@ -16,6 +16,57 @@
     <button id="musicToggleBtn">🎵 Music: Off</button>
   </div>
 
+  <!-- ===== INSTRUCTIONS SECTION ===== -->
+  <div id="instructions" style="display:none;">
+    <h1>How to Play</h1>
+
+    <div class="instructions-text">
+      <h2>Game Rules</h2>
+      <p>
+        Welcome to Fit Ninjas! This is a fun exercise game for two players.
+      </p>
+      <ul>
+        <li>The game has 3 rounds: Jumping Jacks, Squats, and Push-ups</li>
+        <li>Each round lasts 1 minute</li>
+        <li>Stand in front of the camera - Player 1 on the LEFT, Player 2 on the RIGHT</li>
+        <li>Perform the exercises correctly to earn points</li>
+        <li>The player with the most points at the end wins!</li>
+        <li>Watch the demo videos below to learn proper form</li>
+      </ul>
+    </div>
+
+    <button id="speakInstructionsBtn">🔊 Read Instructions Aloud</button>
+
+    <!-- Exercise Demo Videos -->
+    <div class="exercise-videos">
+      <div class="video-container">
+        <h3>Jumping Jacks</h3>
+        <video id="jumpingJacksVideo" controls>
+          <source src="videos/jumping_jacks_demo.mp4" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
+      </div>
+
+      <div class="video-container">
+        <h3>Squats</h3>
+        <video id="squatsVideo" controls>
+          <source src="videos/squats_demo.mp4" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
+      </div>
+
+      <div class="video-container">
+        <h3>Push-ups</h3>
+        <video id="pushupsVideo" controls>
+          <source src="videos/pushups_demo.mp4" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
+      </div>
+    </div>
+
+    <button id="backToMenuBtn">Back to Menu</button>
+  </div>
+
   <!-- ===== GAME SECTION ===== -->
   <div id="game" style="display:none;">
 
@@ -60,6 +111,15 @@
       <div class="popup-content">
         <h2 id="roundMessage">Get Ready!</h2>
         <p id="roundExercise"></p>
+
+        <!-- Exercise Demo Video in Popup -->
+        <div class="popup-video-container">
+          <video id="roundDemoVideo" controls>
+            <source id="roundDemoVideoSource" src="" type="video/mp4">
+            Your browser does not support the video tag.
+          </video>
+        </div>
+
         <button id="continueBtn">Continue</button>
         <button id="roundQuitBtn">Quit</button>
       </div>
