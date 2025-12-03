@@ -16,6 +16,17 @@ const musicToggleBtn = document.getElementById('musicToggleBtn');
 const backToMenuBtn = document.getElementById('backToMenuBtn');
 const speakInstructionsBtn = document.getElementById('speakInstructionsBtn');
 const riveCanvas = document.getElementById('riveCanvas');
+const leaderboardBtn = document.getElementById('leaderboardBtn');
+const leaderboard = document.getElementById('leaderboard');
+const leaderboardContent = document.getElementById('leaderboardContent');
+const backToMenuFromLeaderboard = document.getElementById('backToMenuFromLeaderboard');
+const playerNamesPopup = document.getElementById('playerNamesPopup');
+const player1NameInput = document.getElementById('player1NameInput');
+const player2NameInput = document.getElementById('player2NameInput');
+const hajimeBtn = document.getElementById('hajimeBtn');
+const countdownOverlay = document.getElementById('countdownOverlay');
+const countdownText = document.getElementById('countdownText');
+const waterBreakMessage = document.getElementById('waterBreakMessage');
 
 // ======== Round Popup Elements ========
 const roundPopup = document.getElementById('roundPopup');
@@ -56,6 +67,10 @@ let player1TotalScore = 0;
 let player2TotalScore = 0;
 let player1RoundScore = 0;
 let player2RoundScore = 0;
+let player1Name = "Player 1";
+let player2Name = "Player 2";
+let player1RoundScores = []; // Stores scores for each round
+let player2RoundScores = []; // Stores scores for each round
 let socket;
 let videoInterval;
 const SERVER_URL = 'http://127.0.0.1:8000';
@@ -417,6 +432,10 @@ function endRound() {
   clearInterval(gameTimer);
   timerDisplay.classList.remove("warning");
 
+  // Save round scores to arrays
+  player1RoundScores.push(player1RoundScore);
+  player2RoundScores.push(player2RoundScore);
+
   // Add round scores to total
   player1TotalScore += player1RoundScore;
   player2TotalScore += player2RoundScore;
@@ -436,6 +455,7 @@ function endRound() {
   if (currentRound < rounds.length - 1) {
     showRoundTransition();
   } else {
+    saveGameToLeaderboard();
     showWinnerPopup();
   }
 }
@@ -456,6 +476,13 @@ function showRoundTransition() {
 
   roundMessage.textContent = `Round ${currentRound + 1}`;
   roundExercise.textContent = `Next Exercise: ${nextRound.name}`;
+
+  // Show water break message for rounds 2 and 3
+  if (currentRound >= 1) {
+    waterBreakMessage.style.display = "block";
+  } else {
+    waterBreakMessage.style.display = "none";
+  }
 
   // Set video source for the next round
   roundDemoVideoSource.src = nextRound.videoPath;
@@ -622,12 +649,35 @@ function displayAIReport(report) {
 }
 
 // ======== Button Events ========
-startBtn.addEventListener('click', async () => {
+startBtn.addEventListener('click', () => {
+  // Show player name input popup
+  menu.style.display = 'none';
+  playerNamesPopup.style.display = 'flex';
+  player1NameInput.value = '';
+  player2NameInput.value = '';
+  player1NameInput.focus();
+});
+
+hajimeBtn.addEventListener('click', async () => {
+  // Get player names
+  player1Name = player1NameInput.value.trim() || 'Player 1';
+  player2Name = player2NameInput.value.trim() || 'Player 2';
+
+  // Hide player names popup
+  playerNamesPopup.style.display = 'none';
+
   console.log("🎮 Start button clicked");
   const webcamGranted = await startWebcam();
   if (webcamGranted) {
-    menu.style.display = 'none';
     game.style.display = 'flex';
+
+    // Update player labels on camera feeds
+    document.querySelectorAll('.player-label')[0].textContent = player1Name;
+    document.querySelectorAll('.player-label')[1].textContent = player2Name;
+
+    // Update scoreboard names
+    document.querySelectorAll('.scoreboard h2')[0].textContent = player1Name;
+    document.querySelectorAll('.scoreboard h2')[1].textContent = player2Name;
 
     // Play Hajime sound when game starts
     if (musicOn) {
@@ -641,11 +691,14 @@ startBtn.addEventListener('click', async () => {
     player2TotalScore = 0;
     player1RoundScore = 0;
     player2RoundScore = 0;
+    player1RoundScores = [];
+    player2RoundScores = [];
     updateScoreDisplay();
 
     // Show round transition before first round with video
     roundMessage.textContent = "Get Ready!";
     roundExercise.textContent = `First Exercise: ${rounds[0].name}`;
+    waterBreakMessage.style.display = "none"; // Hide for first round
 
     // Set video source for the round popup
     roundDemoVideoSource.src = rounds[0].videoPath;
@@ -659,11 +712,10 @@ startBtn.addEventListener('click', async () => {
       menuMusic.currentTime = 0;
       gameMusic.play();
     }
+  } else {
+    // If webcam not granted, go back to menu
+    menu.style.display = 'flex';
   }
-});
-
-instructionsBtn.addEventListener('click', () => {
-  speak("Welcome to the Kids Fitness Battle! Two players compete in three rounds. Round 1: Jumping Jacks. Round 2: Squats. Round 3: Push-ups. Each round lasts 30 seconds. The player with the most total points wins!");
 });
 
 musicToggleBtn.addEventListener('click', () => {
@@ -714,7 +766,8 @@ continueBtn.addEventListener('click', () => {
     currentRoundMusic.play().catch(err => console.log("Error playing round music:", err));
   }
 
-  startRoundTimer();
+  // Show countdown before starting round
+  showCountdown();
 });
 
 roundQuitBtn.addEventListener('click', () => {
@@ -793,6 +846,18 @@ backToMenuBtn.addEventListener('click', () => {
   menu.style.display = 'flex';
 });
 
+// ======== Leaderboard Navigation ========
+leaderboardBtn.addEventListener('click', () => {
+  menu.style.display = 'none';
+  leaderboard.style.display = 'flex';
+  displayLeaderboard();
+});
+
+backToMenuFromLeaderboard.addEventListener('click', () => {
+  leaderboard.style.display = 'none';
+  menu.style.display = 'flex';
+});
+
 // ======== Speak Instructions Button ========
 speakInstructionsBtn.addEventListener('click', () => {
   const instructionsText = `
@@ -841,6 +906,95 @@ function stopGame() {
 
   processedImage1.src = "";
   processedImage2.src = "";
+}
+
+// ======== Countdown Function ========
+function showCountdown() {
+  countdownOverlay.style.display = "flex";
+  let count = 3;
+
+  function updateCountdown() {
+    if (count > 0) {
+      countdownText.textContent = count;
+      count--;
+      setTimeout(updateCountdown, 1000);
+    } else {
+      countdownText.textContent = "Hajime!";
+      setTimeout(() => {
+        countdownOverlay.style.display = "none";
+        startRoundTimer();
+      }, 1000);
+    }
+  }
+
+  updateCountdown();
+}
+
+// ======== Leaderboard Functions ========
+function saveGameToLeaderboard() {
+  // Get existing leaderboard from localStorage
+  let leaderboardData = JSON.parse(localStorage.getItem('fitnessLeaderboard') || '[]');
+
+  // Create new game entry
+  const gameEntry = {
+    date: new Date().toLocaleString(),
+    player1: {
+      name: player1Name,
+      roundScores: player1RoundScores,
+      totalScore: player1TotalScore
+    },
+    player2: {
+      name: player2Name,
+      roundScores: player2RoundScores,
+      totalScore: player2TotalScore
+    },
+    winner: player1TotalScore > player2TotalScore ? player1Name :
+            player2TotalScore > player1TotalScore ? player2Name : 'Tie'
+  };
+
+  // Add to beginning of array
+  leaderboardData.unshift(gameEntry);
+
+  // Keep only last 5 games
+  leaderboardData = leaderboardData.slice(0, 5);
+
+  // Save back to localStorage
+  localStorage.setItem('fitnessLeaderboard', JSON.stringify(leaderboardData));
+}
+
+function displayLeaderboard() {
+  const leaderboardData = JSON.parse(localStorage.getItem('fitnessLeaderboard') || '[]');
+
+  if (leaderboardData.length === 0) {
+    leaderboardContent.innerHTML = '<p style="text-align: center; font-size: 1.2em; color: #666;">No games played yet. Start playing to see leaderboard!</p>';
+    return;
+  }
+
+  // Sort by highest total score (player1 + player2)
+  leaderboardData.sort((a, b) => {
+    const totalA = a.player1.totalScore + a.player2.totalScore;
+    const totalB = b.player1.totalScore + b.player2.totalScore;
+    return totalB - totalA;
+  });
+
+  let html = '';
+  leaderboardData.forEach((game, index) => {
+    const isWinner1 = game.winner === game.player1.name;
+    const isWinner2 = game.winner === game.player2.name;
+
+    html += `
+      <div class="leaderboard-entry ${index === 0 ? 'winner' : ''}">
+        <h3>${index === 0 ? '🏆 ' : ''}Game ${index + 1} - ${game.date}</h3>
+        <p><strong>${isWinner1 ? '👑 ' : ''}${game.player1.name}:</strong> ${game.player1.totalScore} points
+           (R1: ${game.player1.roundScores[0] || 0}, R2: ${game.player1.roundScores[1] || 0}, R3: ${game.player1.roundScores[2] || 0})</p>
+        <p><strong>${isWinner2 ? '👑 ' : ''}${game.player2.name}:</strong> ${game.player2.totalScore} points
+           (R1: ${game.player2.roundScores[0] || 0}, R2: ${game.player2.roundScores[1] || 0}, R3: ${game.player2.roundScores[2] || 0})</p>
+        <p style="color: #4CAF50; font-weight: bold;">Winner: ${game.winner}</p>
+      </div>
+    `;
+  });
+
+  leaderboardContent.innerHTML = html;
 }
 
 // ======== Rive Animation Setup ========

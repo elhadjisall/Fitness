@@ -11,6 +11,7 @@
   <div id="menu">
     <button id="startBtn">Start Game</button>
     <button id="instructionsBtn">Instructions</button>
+    <button id="leaderboardBtn">Leaderboard</button>
 
     <!-- 🎵 Music Toggle Button -->
     <button id="musicToggleBtn">🎵 Music: Off</button>
@@ -67,6 +68,54 @@
     <button id="backToMenuBtn">Back to Menu</button>
   </div>
 
+  <!-- ===== LEADERBOARD SECTION ===== -->
+  <div id="leaderboard" style="display:none;">
+    <h1>Leaderboard</h1>
+    <div id="leaderboardContent" class="instructions-text">
+      <!-- Leaderboard will be populated here -->
+    </div>
+    <button id="backToMenuFromLeaderboard">Back to Menu</button>
+  </div>
+
+  <!-- ===== PLAYER NAME INPUT POPUP ===== -->
+  <div id="playerNamesPopup" style="display:none;">
+    <div class="popup-content player-names-content">
+      <h2 style="color: #ff2d55; margin-bottom: 30px;">Enter Player Names</h2>
+
+      <div class="player-names-container">
+        <!-- Player 1 Input -->
+        <div class="player-input-box">
+          <h3>Player 1</h3>
+          <div class="player-image-placeholder" id="player1ImagePlaceholder">
+            <span>Player 1 Image</span>
+          </div>
+          <input type="text" id="player1NameInput" placeholder="Enter Player 1 Name" maxlength="15">
+        </div>
+
+        <!-- VS Divider -->
+        <div class="vs-divider">
+          <h2>VS</h2>
+        </div>
+
+        <!-- Player 2 Input -->
+        <div class="player-input-box">
+          <h3>Player 2</h3>
+          <div class="player-image-placeholder" id="player2ImagePlaceholder">
+            <span>Player 2 Image</span>
+          </div>
+          <input type="text" id="player2NameInput" placeholder="Enter Player 2 Name" maxlength="15">
+        </div>
+      </div>
+
+      <button id="hajimeBtn" style="margin-top: 30px; font-size: 24px; padding: 15px 50px;">Hajime!</button>
+    </div>
+  </div>
+
+  <!-- ===== COUNTDOWN OVERLAY ===== -->
+  <div id="countdownOverlay" style="display:none;">
+    <div id="countdownText">3</div>
+  </div>
+
   <!-- ===== GAME SECTION ===== -->
   <div id="game" style="display:none;">
 
@@ -120,6 +169,11 @@
         <h2 id="roundMessage">Get Ready!</h2>
         <p id="roundExercise"></p>
 
+        <!-- Water Break Message (for rounds 2 and 3) -->
+        <p id="waterBreakMessage" style="display:none; color: #4CAF50; font-size: 1.3em; font-weight: bold; margin: 15px 0;">
+          Take a short break, drink some water! 💧
+        </p>
+
         <!-- Exercise Demo Video in Popup -->
         <div class="popup-video-container">
           <video id="roundDemoVideo" controls>
@@ -132,7 +186,6 @@
         <button id="roundQuitBtn">Quit</button>
       </div>
     </div>
-
     <!-- ===== WINNER POPUP ===== -->
     <div id="popup" style="display: none;">
       <div class="popup-content">
