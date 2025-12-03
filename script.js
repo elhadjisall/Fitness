@@ -15,6 +15,7 @@ const roundIndicator = document.getElementById('roundIndicator');
 const musicToggleBtn = document.getElementById('musicToggleBtn');
 const backToMenuBtn = document.getElementById('backToMenuBtn');
 const speakInstructionsBtn = document.getElementById('speakInstructionsBtn');
+const riveCanvas = document.getElementById('riveCanvas');
 
 // ======== Round Popup Elements ========
 const roundPopup = document.getElementById('roundPopup');
@@ -841,3 +842,39 @@ function stopGame() {
   processedImage1.src = "";
   processedImage2.src = "";
 }
+
+// ======== Rive Animation Setup ========
+// Load and display Rive animation in the game
+let riveInstance = null;
+
+function loadRiveAnimation() {
+  if (!riveCanvas || typeof rive === 'undefined') {
+    console.log('Rive canvas or library not available');
+    return;
+  }
+
+  try {
+    riveInstance = new rive.Rive({
+      src: 'animations/game-animation.riv',
+      canvas: riveCanvas,
+      autoplay: true,
+      // Automatically plays the first animation or state machine found
+      onLoad: () => {
+        console.log('✅ Rive animation loaded successfully!');
+        riveInstance.resizeDrawingSurfaceToCanvas();
+      },
+      onLoadError: (err) => {
+        console.log('⚠️ Rive animation not found. Place your .riv file at: animations/game-animation.riv');
+        console.error('Rive load error:', err);
+      }
+    });
+  } catch (error) {
+    console.log('⚠️ Rive error:', error);
+  }
+}
+
+// Load Rive animation when page loads
+window.addEventListener('load', () => {
+  // Small delay to ensure Rive library is loaded
+  setTimeout(loadRiveAnimation, 100);
+});
