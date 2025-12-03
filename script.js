@@ -861,6 +861,12 @@ backToMenuFromLeaderboard.addEventListener('click', () => {
   menu.style.display = 'flex';
 });
 
+// ======== Back to Menu from Player Names Popup ========
+document.getElementById('backToMenuFromNamesBtn').addEventListener('click', () => {
+  playerNamesPopup.style.display = 'none';
+  menu.style.display = 'flex';
+});
+
 // ======== Speak Instructions Button ========
 speakInstructionsBtn.addEventListener('click', () => {
   const instructionsText = `
