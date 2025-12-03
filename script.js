@@ -671,6 +671,9 @@ hajimeBtn.addEventListener('click', async () => {
   if (webcamGranted) {
     game.style.display = 'flex';
 
+    // Load Rive animation when game starts (canvas is now visible)
+    setTimeout(loadRiveAnimation, 200);
+
     // Update player labels on camera feeds
     document.querySelectorAll('.player-label')[0].textContent = player1Name;
     document.querySelectorAll('.player-label')[1].textContent = player2Name;
@@ -1000,22 +1003,39 @@ function displayLeaderboard() {
 // ======== Rive Animation Setup ========
 // Load and display Rive animation in the game
 let riveInstance = null;
+let riveLoaded = false;
 
 function loadRiveAnimation() {
-  if (!riveCanvas || typeof rive === 'undefined') {
-    console.log('Rive canvas or library not available');
+  // Don't reload if already loaded
+  if (riveLoaded) {
+    console.log('Rive already loaded');
+    return;
+  }
+
+  if (!riveCanvas) {
+    console.log('❌ Rive canvas element not found');
+    return;
+  }
+
+  if (typeof rive === 'undefined') {
+    console.log('❌ Rive library not loaded yet');
     return;
   }
 
   try {
+    console.log('🎨 Loading Rive animation from: animations/game-animation.riv');
+
     riveInstance = new rive.Rive({
       src: 'animations/game-animation.riv',
       canvas: riveCanvas,
       autoplay: true,
+      fit: rive.Fit.Cover,
+      alignment: rive.Alignment.Center,
       // Automatically plays the first animation or state machine found
       onLoad: () => {
         console.log('✅ Rive animation loaded successfully!');
         riveInstance.resizeDrawingSurfaceToCanvas();
+        riveLoaded = true;
       },
       onLoadError: (err) => {
         console.log('⚠️ Rive animation not found. Place your .riv file at: animations/game-animation.riv');
@@ -1024,11 +1044,6 @@ function loadRiveAnimation() {
     });
   } catch (error) {
     console.log('⚠️ Rive error:', error);
+    console.error(error);
   }
 }
-
-// Load Rive animation when page loads
-window.addEventListener('load', () => {
-  // Small delay to ensure Rive library is loaded
-  setTimeout(loadRiveAnimation, 100);
-});
